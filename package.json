@@ -1,0 +1,159 @@
+{
+  "name": "cortex-memory",
+  "displayName": "Cortex - AI Memory for Your Codebase",
+  "description": "Gives Claude, Cursor, and Cline a permanent memory for your codebase. Never re-explain context again.",
+  "version": "0.1.0",
+  "publisher": "cortex-dev",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "AI",
+    "Other"
+  ],
+  "keywords": [
+    "claude",
+    "cursor",
+    "memory",
+    "context",
+    "AI",
+    "cline",
+    "windsurf"
+  ],
+  "activationEvents": [
+    "workspaceContains:**/CLAUDE.md",
+    "workspaceContains:**/.cortex",
+    "onStartupFinished"
+  ],
+  "main": "./dist/index.js",
+  "icon": "media/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cortex-dev/cortex"
+  },
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "cortex-sidebar",
+          "title": "Cortex",
+          "icon": "media/brain.svg"
+        }
+      ]
+    },
+    "views": {
+      "cortex-sidebar": [
+        {
+          "id": "cortex-memory-tree",
+          "name": "Memory Layers"
+        },
+        {
+          "id": "cortex-health",
+          "name": "Memory Health",
+          "type": "webview"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "cortex.init",
+        "title": "Cortex: Initialize Project Memory"
+      },
+      {
+        "command": "cortex.status",
+        "title": "Cortex: Show Memory Status"
+      },
+      {
+        "command": "cortex.sync",
+        "title": "Cortex: Sync Team Memory"
+      },
+      {
+        "command": "cortex.search",
+        "title": "Cortex: Search Memories"
+      },
+      {
+        "command": "cortex.refresh",
+        "title": "Cortex: Refresh Memory View"
+      },
+      {
+        "command": "cortex.pinMemory",
+        "title": "Cortex: Pin Memory"
+      },
+      {
+        "command": "cortex.unpinMemory",
+        "title": "Cortex: Unpin Memory"
+      }
+    ],
+    "configuration": {
+      "title": "Cortex",
+      "properties": {
+        "cortex.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable Cortex memory system"
+        },
+        "cortex.llmProvider": {
+          "type": "string",
+          "enum": ["gemini", "anthropic", "ollama"],
+          "default": "gemini",
+          "description": "LLM provider for memory extraction (gemini = free, anthropic = Haiku, ollama = local)"
+        },
+        "cortex.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "API key for Gemini or Anthropic (not needed for Ollama)"
+        },
+        "cortex.llmModel": {
+          "type": "string",
+          "default": "",
+          "description": "Override LLM model name (leave empty for default)"
+        },
+        "cortex.maxWorkingMemoryTokens": {
+          "type": "number",
+          "default": 800,
+          "description": "Maximum tokens for working memory injection"
+        },
+        "cortex.autoInjectClaudeMd": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically inject working memory into CLAUDE.md"
+        },
+        "cortex.extractionModel": {
+          "type": "string",
+          "default": "claude-haiku-4-5-20251001",
+          "description": "Model to use for memory extraction"
+        },
+        "cortex.teamSyncEnabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable git-based team memory sync"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build",
+    "build": "tsup src/extension/index.ts --format cjs --out-dir dist --external vscode",
+    "watch": "tsup src/extension/index.ts --format cjs --out-dir dist --external vscode --watch",
+    "build:cli": "tsup src/cli/index.ts --format cjs --out-dir dist/cli",
+    "build:mcp": "tsup src/mcp/index.ts --format cjs --out-dir dist/mcp",
+    "lint": "eslint src/",
+    "test": "vitest run"
+  },
+  "bin": {
+    "cortex": "./dist/cli/index.js"
+  },
+  "dependencies": {
+    "chokidar": "^4.0.0",
+    "commander": "^13.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^2.15.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}

@@ -1,0 +1,253 @@
+# The Complete Blueprint: Project Memory OS
+
+## First, Understand The Real Problem Deeply
+
+Claude Code's compaction isn't just annoying — it causes:
+- **Re-explanation tax**: Developers spend 15-30 min per session re-establishing context
+- **Decision amnesia**: Why was X built this way? No one remembers
+- **Architecture drift**: New sessions make decisions contradicting old ones
+- **Velocity death**: Senior devs context-switch between 5+ projects, each needs fresh re-onboarding
+
+**You're not building a "context file updater." You're building a Project Memory Operating System.**
+
+---
+
+## The 3 Layers of Memory (This Is The Core Insight)
+
+Most people think memory = one big file. Wrong. Human memory has layers, yours should too:
+
+```
+┌─────────────────────────────────────────┐
+│  LAYER 1: WORKING MEMORY (hot)          │
+│  Last 3 sessions, recent decisions,     │
+│  current sprint context                 │
+│  → Injected every single session        │
+├─────────────────────────────────────────┤
+│  LAYER 2: EPISODIC MEMORY (warm)        │
+│  Feature histories, bug patterns,       │
+│  architectural decisions with reasons   │
+│  → Injected when relevant               │
+├─────────────────────────────────────────┤
+│  LAYER 3: SEMANTIC MEMORY (cold)        │
+│  Full project knowledge graph,          │
+│  all decisions ever made, full history  │
+│  → Queryable on demand                  │
+└─────────────────────────────────────────┘
+```
+
+This layered approach means you **never dump everything** — you inject only what's relevant, keeping Claude's context window free for actual work.
+
+---
+
+## Full Technical Architecture
+
+```
+YOUR TOOL (let's call it CORTEX)
+│
+├── /cortex-engine/          ← Core Node.js/Python daemon
+│   ├── watcher.ts           ← Monitors Claude Code sessions
+│   ├── extractor.ts         ← Pulls meaning from conversations
+│   ├── compressor.ts        ← Condenses without losing signal
+│   └── injector.ts          ← Smart context injection
+│
+├── /vscode-extension/       ← VSCode plugin
+│   ├── sidebar panel        ← Visual memory browser
+│   ├── session overlay      ← Shows what context is loaded
+│   └── manual controls      ← Pin/unpin/edit memories
+│
+├── /.cortex/                ← Lives in project root (gitignored or committed)
+│   ├── working.md           ← Hot layer - always injected
+│   ├── episodes/            ← Warm layer - feature/bug histories
+│   ├── graph.json           ← Cold layer - full knowledge graph
+│   ├── decisions.md         ← Architectural decision record (auto-generated)
+│   └── personas.md          ← How Claude should behave in THIS project
+│
+└── /cli/                    ← cortex CLI tool
+    ├── cortex init          ← Bootstrap a project
+    ├── cortex status        ← See memory health
+    ├── cortex query "why X" ← Search your own project memory
+    └── cortex export        ← Export for onboarding new devs
+```
+
+---
+
+## The Session Lifecycle (How It Actually Works)
+
+### Before Session Starts
+```
+1. Cortex detects Claude Code is opening in /project-dir
+2. Scans what files were recently changed (git diff)
+3. Detects what sprint/milestone you're likely on
+4. Builds a SMART CONTEXT PACKET:
+   - Project identity (what this is, stack, conventions)
+   - Recent decisions relevant to today's changed files
+   - Last session summary
+   - Current known open problems
+5. Injects into CLAUDE.md automatically
+6. Total injection: ~800 tokens (leaving Claude's window free)
+```
+
+### During Session
+```
+1. Cortex watches the conversation file Claude Code creates
+2. Detects signals:
+   - "I've decided to..." → decision event
+   - "The bug was caused by..." → bug pattern event  
+   - "Let's refactor..." → architecture event
+   - Files being created/deleted → structural event
+3. Tags and queues these for post-session processing
+```
+
+### After Session / Before Compaction
+```
+1. Detects when Claude Code signals compaction is near
+2. BEFORE compaction: fires extraction prompt to Claude API:
+   "Summarize: decisions made, problems solved, 
+    current state, what's next, any new patterns learned"
+3. Stores this as new episode
+4. Updates working memory with session delta
+5. Updates knowledge graph
+6. CLAUDE.md refreshed for next session
+```
+
+---
+
+## The Secret Weapons (What Makes It Elite)
+
+### 1. Decision Log (Auto ADR)
+Every architectural decision gets logged automatically with context:
+```markdown
+## Decision: Use Redis over Postgres for sessions
+- Date: 2026-03-10
+- Context: Scaling issues with session queries >10k users
+- Decision: Redis with 24h TTL
+- Alternatives considered: Postgres JSONB, Memcached
+- Reason: Latency requirements, team Redis familiarity
+- Files affected: /auth/session.ts, /config/cache.ts
+```
+**This alone is worth $9/month to any engineering team.**
+
+### 2. Persona System
+Each project trains its own Claude personality:
+```markdown
+## Project Persona
+- Always use functional patterns, never OOP
+- This team hates over-engineering
+- Preferred: small PRs, explicit error handling
+- Never suggest: microservices (we tried, failed, see episode #4)
+- Code style: [auto-detected from codebase]
+```
+
+### 3. Cross-Project Intelligence
+If you work on 5 projects, Cortex learns:
+- Your personal coding patterns
+- Mistakes you repeat across projects
+- Solutions that worked in Project A that apply to Project B
+
+### 4. Team Sync Mode
+```
+cortex sync --team
+```
+- Memory commits to a shared branch
+- New team member runs `cortex init` → instantly has full project context
+- Onboarding time: weeks → hours
+
+### 5. Memory Health Score
+```
+┌─ CORTEX STATUS ──────────────────────┐
+│ Project: my-saas-app                 │
+│ Memory Health: 87/100 ✅              │
+│ Last updated: 2 hours ago            │
+│ Working memory: 743 tokens           │
+│ Episodes: 47                         │
+│ Decisions logged: 23                 │
+│ ⚠️  Auth module memory is stale       │
+│    (no updates in 30 days, but       │
+│     files changed 3x this week)      │
+└──────────────────────────────────────┘
+```
+
+---
+
+## Tech Stack To Build This
+
+| Component | Technology | Why |
+|-----------|-----------|-----|
+| Core Engine | TypeScript/Node.js | Same ecosystem as VSCode |
+| VSCode Extension | VSCode Extension API | Native integration |
+| File Watching | chokidar | Battle-tested |
+| Embeddings (semantic search) | OpenAI/Voyage embeddings | For smart retrieval |
+| Vector store | LanceDB (local) | Runs locally, no server needed |
+| Extraction LLM | Claude API (Haiku) | Cheap, fast, same family |
+| CLI | Commander.js | Standard |
+| Sync | Git under the hood | Devs already trust it |
+
+**Key insight: Everything runs locally. No servers, no cloud, no privacy concerns. This is a massive selling point.**
+
+---
+
+## Pricing Architecture (How To Actually Make Money)
+
+| Tier | Price | What They Get |
+|------|-------|---------------|
+| **Solo** | $9/month | 3 projects, basic memory layers, VSCode extension |
+| **Pro** | $19/month | Unlimited projects, cross-project intelligence, team export |
+| **Team** | $49/month per 5 devs | Team sync, shared memory, onboarding packs |
+| **Enterprise** | Custom | Self-hosted, SSO, audit logs |
+
+**The $9 is perfect for Solo. But Pro and Team are where you actually scale revenue.**
+
+---
+
+## Go-To-Market Strategy
+
+### Phase 1: Build & Seed (Month 1-2)
+- Build core engine + basic VSCode extension
+- Launch free beta on Reddit r/ClaudeAI, r/cursor, Hacker News
+- Target: 500 beta users, collect brutal feedback
+
+### Phase 2: Monetize (Month 3)
+- Ship paid tiers
+- Create YouTube demo showing side-by-side: Claude Code with vs without Cortex
+- One good demo video = thousands of signups
+
+### Phase 3: Expand (Month 4+)
+- Cursor support
+- Windsurf support  
+- JetBrains plugin
+- CLI-only mode (for Vim/Neovim users who will love you forever)
+
+---
+
+## The Biggest Risks And How To Handle Them
+
+| Risk | Reality | Counter |
+|------|---------|---------|
+| Anthropic builds this natively | Possible in 12-18 months | Move fast, build moat with team features |
+| Privacy concerns | Devs are paranoid | Local-first architecture is your answer |
+| "I'll just maintain CLAUDE.md myself" | Some will | Show the automation value in demo video |
+| Competition from Cursor/Windsurf | They'll add memory too | Be IDE-agnostic, work everywhere |
+
+---
+
+## What You Build First (The MVP)
+
+Don't build everything. Build this in 30 days:
+
+1. ✅ VSCode extension that detects Claude Code sessions
+2. ✅ Post-session extraction via Claude Haiku API
+3. ✅ Auto-updating `working.md` injected into CLAUDE.md
+4. ✅ Basic sidebar showing current memory state
+5. ✅ `cortex init` and `cortex status` CLI commands
+
+**That's it. Ship that. Charge $9. See if people pay.**
+
+---
+
+## Final Verdict
+
+This is a **$500k ARR business** if executed well. The problem is real, the solution is technically buildable by one good developer in 2-3 months, and the $9 price is low enough that nobody thinks twice about paying it.
+
+The moat isn't the technology — it's the **accumulated project memory** users build up over months. After 6 months of Cortex, switching away means losing your entire project brain. That's the real lock-in.
+
+**Want me to start building the MVP? I can architect the VSCode extension and core engine right now.**

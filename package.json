@@ -134,8 +134,8 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run build",
-    "build": "tsup src/extension/index.ts --format cjs --out-dir dist --external vscode",
-    "watch": "tsup src/extension/index.ts --format cjs --out-dir dist --external vscode --watch",
+    "build": "tsup --config tsup.config.ts",
+    "watch": "tsup --config tsup.config.ts --watch",
     "build:cli": "tsup src/cli/index.ts --format cjs --out-dir dist/cli",
     "build:mcp": "tsup src/mcp/index.ts --format cjs --out-dir dist/mcp",
     "lint": "eslint src/",

@@ -180,7 +180,7 @@ export class HealthViewProvider implements vscode.WebviewViewProvider {
 
   private buildHtml(h: MemoryHealth): string {
     const scoreColor = h.score >= 70 ? '#4ec9b0' : h.score >= 40 ? '#dcdcaa' : '#f44747';
-    const maxTokens = 8000; // sensible default budget
+    const maxTokens = 800; // matches cortex.maxWorkingMemoryTokens default
     const tokenPct = Math.min(100, Math.round((h.workingMemoryTokens / maxTokens) * 100));
     const tokenBarColor = tokenPct > 80 ? '#f44747' : tokenPct > 50 ? '#dcdcaa' : '#4ec9b0';
 

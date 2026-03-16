@@ -27,14 +27,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   outputChannel = vscode.window.createOutputChannel('Cortex');
   outputChannel.appendLine('Cortex extension activating...');
 
-  // ---- Sidebar tree view (memory layers) ----
   const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
+
+  // ---- Sidebar tree view (memory layers) ----
+  // MUST be registered synchronously before anything async,
+  // otherwise VSCode shows "no data provider registered".
   const memoryTreeProvider = new MemoryTreeProvider();
-  const treeView = vscode.window.createTreeView('cortex-memory-tree', {
-    treeDataProvider: memoryTreeProvider,
-    showCollapseAll: true,
-  });
-  context.subscriptions.push(treeView);
+  context.subscriptions.push(
+    vscode.window.createTreeView('cortex-memory-tree', {
+      treeDataProvider: memoryTreeProvider,
+      showCollapseAll: true,
+    }),
+  );
 
   // ---- Health webview panel ----
   const healthViewProvider = new HealthViewProvider(context.extensionUri);
@@ -45,27 +49,33 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // ---- Commands ----
   registerCommands(context, memoryTreeProvider, healthViewProvider);
 
-  // ---- Background processes ----
-  if (workspaceRoot) {
-    try {
-      sessionWatcher = new SessionWatcher(workspaceRoot);
-      sessionWatcher.start();
-      outputChannel.appendLine('Session watcher started.');
-    } catch (err) {
-      outputChannel.appendLine(`Failed to start session watcher: ${err}`);
-    }
+  outputChannel.appendLine('Sidebar and commands registered.');
 
-    try {
-      const store = new MemoryStore(workspaceRoot);
-      disposeInjector = await setupAutoInjection(workspaceRoot, store);
-      outputChannel.appendLine('CLAUDE.md injector started.');
-    } catch (err) {
-      outputChannel.appendLine(`Failed to start CLAUDE.md injector: ${err}`);
-    }
+  // ---- Background processes (non-blocking) ----
+  // These run after the UI is ready so they never block sidebar registration.
+  if (workspaceRoot) {
+    setImmediate(() => {
+      try {
+        sessionWatcher = new SessionWatcher(workspaceRoot);
+        sessionWatcher.start();
+        outputChannel.appendLine('Session watcher started.');
+      } catch (err) {
+        outputChannel.appendLine(`Failed to start session watcher: ${err}`);
+      }
+    });
+
+    setImmediate(async () => {
+      try {
+        const store = new MemoryStore(workspaceRoot);
+        disposeInjector = await setupAutoInjection(workspaceRoot, store);
+        outputChannel.appendLine('CLAUDE.md injector started.');
+      } catch (err) {
+        outputChannel.appendLine(`Failed to start CLAUDE.md injector: ${err}`);
+      }
+    });
   }
 
   // ---- Ready ----
-  vscode.window.showInformationMessage('Cortex: Memory system activated');
   outputChannel.appendLine('Cortex extension activated successfully.');
 }
 

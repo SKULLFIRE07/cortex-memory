@@ -1,5 +1,5 @@
 {
-  "name": "cortex-memory",
+  "name": "cortex-ai-memory",
   "displayName": "Cortex - AI Memory for Claude, Cursor, Copilot, Cline",
   "description": "Persistent memory for AI coding assistants. Auto-captures decisions, patterns, and context from Claude Code sessions. Works with Cursor, Cline, Copilot via MCP. Never re-explain your codebase again.",
   "version": "0.1.0",

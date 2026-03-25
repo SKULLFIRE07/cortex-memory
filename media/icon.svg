@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- Premium black & white marketplace icon -->
+  <rect width="256" height="256" rx="48" fill="#0a0a0a"/>
+
+  <!-- Brain silhouette -->
+  <g transform="translate(128, 108)" fill="none" stroke="#ffffff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Left hemisphere -->
+    <path d="M0-52C-20-52-38-42-44-26C-54-22-60-12-60 0C-60 14-50 24-38 24"/>
+    <!-- Right hemisphere -->
+    <path d="M0-52C20-52 38-42 44-26C54-22 60-12 60 0C60 14 50 24 38 24"/>
+    <!-- Stem -->
+    <path d="M-20 24V36C-20 48-10 56 0 56C10 56 20 48 20 36V24"/>
+    <!-- Center line -->
+    <line x1="0" y1="-52" x2="0" y2="24"/>
+    <!-- Neural folds left -->
+    <path d="M-10-36C-24-36-34-24-34-12" stroke-width="3.5"/>
+    <path d="M-10-16C-24-16-38-8-38 6" stroke-width="3.5"/>
+    <!-- Neural folds right -->
+    <path d="M10-36C24-36 34-24 34-12" stroke-width="3.5"/>
+    <path d="M10-16C24-16 38-8 38 6" stroke-width="3.5"/>
+    <!-- Nodes -->
+    <circle cx="-18" cy="-28" r="4" fill="#ffffff" stroke="none"/>
+    <circle cx="18" cy="-28" r="4" fill="#ffffff" stroke="none"/>
+    <circle cx="-24" cy="-4" r="4" fill="#ffffff" stroke="none"/>
+    <circle cx="24" cy="-4" r="4" fill="#ffffff" stroke="none"/>
+    <circle cx="0" cy="-14" r="5" fill="#ffffff" stroke="none"/>
+  </g>
+
+  <!-- Text -->
+  <text x="128" y="224" text-anchor="middle" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif"
+        font-size="28" font-weight="800" letter-spacing="6" fill="#ffffff">CORTEX</text>
+</svg>

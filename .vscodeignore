@@ -1,0 +1,17 @@
+.git/**
+.cortex/**
+.recall/**
+src/**
+landing/**
+node_modules/**
+*.ts
+tsconfig.json
+SCOPE.md
+strt.txt
+package-lock.json
+.gitignore
+.eslintrc*
+.prettierrc*
+**/*.map
+dist/cli/**
+dist/mcp/**

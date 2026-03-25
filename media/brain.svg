@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#cccccc" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Clean minimal brain/memory icon - monochrome -->
+  <path d="M12 3C8.5 3 6 5.5 5.5 8.5C4 9 3 10.5 3 12.5C3 14.5 4.5 16 6 16"/>
+  <path d="M12 3C15.5 3 18 5.5 18.5 8.5C20 9 21 10.5 21 12.5C21 14.5 19.5 16 18 16"/>
+  <path d="M8 16V18C8 19.7 9.8 21 12 21C14.2 21 16 19.7 16 18V16"/>
+  <!-- Neural pathways -->
+  <path d="M12 3V8"/>
+  <path d="M9 8L12 12L15 8"/>
+  <path d="M9 13L12 12L15 13"/>
+  <circle cx="12" cy="12" r="1.5" fill="#cccccc" stroke="none"/>
+</svg>

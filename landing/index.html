@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cortex - Permanent Memory for AI Coding Assistants</title>
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: #000; color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    line-height: 1.6; overflow-x: hidden;
+  }
+  a { color: #00D4FF; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code, .mono { font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+  .section { padding: 100px 0; }
+  .section-label {
+    font-size: 0.75rem; letter-spacing: 3px; text-transform: uppercase;
+    color: #00D4FF; margin-bottom: 16px;
+  }
+  .section-title { font-size: 2rem; font-weight: 700; margin-bottom: 48px; }
+  .fade-in {
+    opacity: 0; transform: translateY(24px);
+    animation: fadeUp 0.6s ease forwards;
+  }
+  @keyframes fadeUp {
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .delay-1 { animation-delay: 0.1s; }
+  .delay-2 { animation-delay: 0.2s; }
+  .delay-3 { animation-delay: 0.3s; }
+  .delay-4 { animation-delay: 0.4s; }
+  .delay-5 { animation-delay: 0.5s; }
+
+  /* Hero */
+  .hero { padding: 160px 0 120px; text-align: center; }
+  .hero h1 { font-size: clamp(3rem, 8vw, 6rem); font-weight: 800; letter-spacing: -2px; }
+  .hero h1 span { color: #00D4FF; }
+  .hero .tagline {
+    font-size: clamp(1rem, 2.5vw, 1.35rem); color: #999; max-width: 560px;
+    margin: 20px auto 40px;
+  }
+  .btn-row { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+  .btn {
+    display: inline-block; padding: 14px 32px; border-radius: 6px;
+    font-size: 1rem; font-weight: 600; transition: all 0.2s;
+  }
+  .btn-primary { background: #00D4FF; color: #000; }
+  .btn-primary:hover { background: #33dfff; text-decoration: none; }
+  .btn-secondary {
+    border: 1px solid #333; color: #fff; background: transparent;
+  }
+  .btn-secondary:hover { border-color: #00D4FF; text-decoration: none; }
+
+  /* Problem */
+  .problems { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 24px; }
+  .problem-card {
+    border: 1px solid #1a1a1a; border-radius: 8px; padding: 32px;
+    background: #0a0a0a;
+  }
+  .problem-card .number { color: #00D4FF; font-size: 2rem; font-weight: 700; margin-bottom: 12px; }
+  .problem-card p { color: #aaa; font-size: 0.95rem; }
+
+  /* How It Works */
+  .layers { display: flex; flex-direction: column; gap: 20px; max-width: 700px; margin: 0 auto; }
+  .layer {
+    border-radius: 8px; padding: 28px 32px; position: relative;
+    display: flex; align-items: center; gap: 24px;
+  }
+  .layer-hot { border: 1px solid #ff4444; background: rgba(255,68,68,0.06); }
+  .layer-warm { border: 1px solid #ffaa00; background: rgba(255,170,0,0.06); }
+  .layer-cold { border: 1px solid #00D4FF; background: rgba(0,212,255,0.06); }
+  .layer-badge {
+    flex-shrink: 0; width: 48px; height: 48px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 1.25rem;
+  }
+  .layer-hot .layer-badge { background: rgba(255,68,68,0.15); color: #ff4444; }
+  .layer-warm .layer-badge { background: rgba(255,170,0,0.15); color: #ffaa00; }
+  .layer-cold .layer-badge { background: rgba(0,212,255,0.15); color: #00D4FF; }
+  .layer-info h3 { font-size: 1.1rem; margin-bottom: 4px; }
+  .layer-info .tag {
+    font-size: 0.7rem; letter-spacing: 1px; text-transform: uppercase;
+    padding: 2px 8px; border-radius: 4px; margin-left: 8px;
+  }
+  .layer-hot .tag { background: rgba(255,68,68,0.2); color: #ff4444; }
+  .layer-warm .tag { background: rgba(255,170,0,0.2); color: #ffaa00; }
+  .layer-cold .tag { background: rgba(0,212,255,0.2); color: #00D4FF; }
+  .layer-info p { color: #888; font-size: 0.9rem; }
+
+  /* Features */
+  .features-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;
+  }
+  .feature-card {
+    border: 1px solid #1a1a1a; border-radius: 8px; padding: 28px 24px;
+    background: #0a0a0a; transition: border-color 0.2s;
+  }
+  .feature-card:hover { border-color: #00D4FF; }
+  .feature-card h3 { font-size: 1rem; margin-bottom: 8px; }
+  .feature-card p { color: #777; font-size: 0.85rem; }
+
+  /* Works With */
+  .integrations {
+    display: flex; flex-wrap: wrap; justify-content: center; gap: 32px;
+    margin-bottom: 24px;
+  }
+  .integration {
+    border: 1px solid #1a1a1a; border-radius: 8px; padding: 20px 32px;
+    background: #0a0a0a; text-align: center; min-width: 140px;
+  }
+  .integration .name { font-weight: 600; font-size: 1rem; margin-bottom: 4px; }
+  .integration .detail { color: #666; font-size: 0.75rem; }
+  .integration-note { text-align: center; color: #555; font-size: 0.85rem; }
+
+  /* Pricing */
+  .pricing-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 20px;
+  }
+  .price-card {
+    border: 1px solid #1a1a1a; border-radius: 8px; padding: 32px 28px;
+    background: #0a0a0a; display: flex; flex-direction: column;
+  }
+  .price-card.featured { border-color: #00D4FF; }
+  .price-card h3 { font-size: 1.1rem; margin-bottom: 8px; }
+  .price-card .price { font-size: 1.75rem; font-weight: 700; margin-bottom: 20px; }
+  .price-card .price span { font-size: 0.85rem; font-weight: 400; color: #666; }
+  .price-card ul { list-style: none; flex: 1; }
+  .price-card li { color: #999; font-size: 0.85rem; padding: 6px 0; border-top: 1px solid #111; }
+  .price-card li:first-child { border-top: none; }
+  .price-card li::before { content: "-- "; color: #333; font-family: monospace; }
+
+  /* Footer */
+  footer {
+    border-top: 1px solid #111; padding: 48px 0; text-align: center; color: #555;
+    font-size: 0.85rem;
+  }
+  footer a { color: #00D4FF; }
+
+  @media (max-width: 600px) {
+    .section { padding: 64px 0; }
+    .hero { padding: 100px 0 80px; }
+    .layer { flex-direction: column; text-align: center; gap: 12px; }
+  }
+</style>
+</head>
+<body>
+
+<section class="hero">
+  <div class="container">
+    <h1 class="fade-in"><span>Cortex</span></h1>
+    <p class="tagline fade-in delay-1">Your AI coding assistant forgets everything. Cortex fixes that.</p>
+    <div class="btn-row fade-in delay-2">
+      <a href="#" class="btn btn-primary">Install Extension</a>
+      <a href="#" class="btn btn-secondary">View on GitHub</a>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="problem">
+  <div class="container">
+    <p class="section-label fade-in">The Problem</p>
+    <h2 class="section-title fade-in delay-1">Every session starts from zero.</h2>
+    <div class="problems">
+      <div class="problem-card fade-in delay-2">
+        <div class="number">15-30 min</div>
+        <p>Per session re-explaining context to your AI assistant. Every. Single. Time.</p>
+      </div>
+      <div class="problem-card fade-in delay-3">
+        <div class="number">Lost</div>
+        <p>Architecture decisions vanish between sessions. Mistakes get repeated.</p>
+      </div>
+      <div class="problem-card fade-in delay-4">
+        <div class="number">Months</div>
+        <p>New team members take months to onboard when tribal knowledge lives nowhere.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="how">
+  <div class="container">
+    <p class="section-label fade-in">How It Works</p>
+    <h2 class="section-title fade-in delay-1">Three-layer memory architecture</h2>
+    <div class="layers">
+      <div class="layer layer-hot fade-in delay-2">
+        <div class="layer-badge">1</div>
+        <div class="layer-info">
+          <h3>Working Memory <span class="tag">hot</span></h3>
+          <p>Always injected into every session. Active project state, current goals, recent decisions.</p>
+        </div>
+      </div>
+      <div class="layer layer-warm fade-in delay-3">
+        <div class="layer-badge">2</div>
+        <div class="layer-info">
+          <h3>Episodic Memory <span class="tag">warm</span></h3>
+          <p>Injected when relevant. Past session summaries, resolved bugs, tried approaches.</p>
+        </div>
+      </div>
+      <div class="layer layer-cold fade-in delay-4">
+        <div class="layer-badge">3</div>
+        <div class="layer-info">
+          <h3>Semantic Memory <span class="tag">cold</span></h3>
+          <p>Queryable on demand. Architecture docs, team conventions, cross-project patterns.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="features">
+  <div class="container">
+    <p class="section-label fade-in">Features</p>
+    <h2 class="section-title fade-in delay-1">Everything your AI needs to remember</h2>
+    <div class="features-grid">
+      <div class="feature-card fade-in delay-1">
+        <h3>3-Layer Memory Architecture</h3>
+        <p>Hot, warm, and cold memory tiers ensure the right context is available at the right time.</p>
+      </div>
+      <div class="feature-card fade-in delay-2">
+        <h3>Auto-Generated Decision Logs</h3>
+        <p>Architecture Decision Records (<code class="mono">ADRs</code>) created automatically from your sessions.</p>
+      </div>
+      <div class="feature-card fade-in delay-3">
+        <h3>Team Sync via Git</h3>
+        <p>Memory is stored as files in your repo. Share context across the team with <code class="mono">git push</code>.</p>
+      </div>
+      <div class="feature-card fade-in delay-4">
+        <h3>Cross-Project Intelligence</h3>
+        <p>Patterns learned in one project carry over. Your AI gets smarter across your entire codebase.</p>
+      </div>
+      <div class="feature-card fade-in delay-5">
+        <h3>Visual Memory Browser</h3>
+        <p>VSCode sidebar panel to inspect, edit, and manage all memory layers in one place.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="integrations">
+  <div class="container">
+    <p class="section-label fade-in">Works With</p>
+    <h2 class="section-title fade-in delay-1">Your tools, your workflow</h2>
+    <div class="integrations fade-in delay-2">
+      <div class="integration">
+        <div class="name">Claude Code</div>
+        <div class="detail">Deep integration (hooks)</div>
+      </div>
+      <div class="integration">
+        <div class="name">Cursor</div>
+        <div class="detail">MCP server</div>
+      </div>
+      <div class="integration">
+        <div class="name">Cline</div>
+        <div class="detail">MCP server</div>
+      </div>
+      <div class="integration">
+        <div class="name">Zed</div>
+        <div class="detail">MCP server</div>
+      </div>
+      <div class="integration">
+        <div class="name">Vim / Neovim</div>
+        <div class="detail">MCP server</div>
+      </div>
+    </div>
+    <p class="integration-note fade-in delay-3">Claude Code uses native hooks for zero-config setup. All others connect via the MCP server protocol.</p>
+  </div>
+</section>
+
+<section class="section" id="pricing">
+  <div class="container">
+    <p class="section-label fade-in">Pricing</p>
+    <h2 class="section-title fade-in delay-1">Start free. Scale when ready.</h2>
+    <div class="pricing-grid">
+      <div class="price-card fade-in delay-1">
+        <h3>Free</h3>
+        <div class="price">$0</div>
+        <ul>
+          <li>1 project</li>
+          <li>Layer 1 (Working Memory) only</li>
+          <li>Community support</li>
+        </ul>
+      </div>
+      <div class="price-card featured fade-in delay-2">
+        <h3>Solo</h3>
+        <div class="price">$9 <span>/mo</span></div>
+        <ul>
+          <li>5 projects</li>
+          <li>All 3 memory layers</li>
+          <li>Auto-generated ADRs</li>
+          <li>Priority support</li>
+        </ul>
+      </div>
+      <div class="price-card fade-in delay-3">
+        <h3>Team</h3>
+        <div class="price">$29 <span>/seat/mo</span></div>
+        <ul>
+          <li>Unlimited projects</li>
+          <li>Team memory sync</li>
+          <li>Onboarding packs</li>
+          <li>Admin dashboard</li>
+        </ul>
+      </div>
+      <div class="price-card fade-in delay-4">
+        <h3>Enterprise</h3>
+        <div class="price">Custom</div>
+        <ul>
+          <li>Self-hosted option</li>
+          <li>SSO / SAML</li>
+          <li>Dedicated support</li>
+          <li>Custom integrations</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <p>Built by developers, for developers.</p>
+    <p style="margin-top: 8px;"><a href="#">GitHub</a></p>
+  </div>
+</footer>
+
+</body>
+</html>

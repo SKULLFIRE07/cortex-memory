@@ -1,0 +1,7 @@
+node_modules/
+dist/
+*.vsix
+.cortex/
+.claude/
+*.log
+.CLAUDE.md.tmp

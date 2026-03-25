@@ -5,20 +5,33 @@
 // fire shell commands at lifecycle events (SessionStart, SessionEnd,
 // PreCompact, Stop). Hooks write signal files to .cortex/.hooks/
 // which this module watches to trigger memory operations.
+//
+// Claude Code hooks config format (in .claude/settings.json):
+//   "hooks": {
+//     "PreToolUse": [{ "type": "command", "command": "..." }],
+//     "PostToolUse": [{ "type": "command", "command": "..." }],
+//     "Notification": [{ "type": "command", "command": "..." }],
+//     "Stop": [{ "type": "command", "command": "..." }]
+//   }
+//
+// Available hook events in Claude Code:
+//   - PreToolUse, PostToolUse, Notification, Stop
+//
+// Note: Claude Code passes hook context via stdin as JSON, including
+// session_id and other metadata.
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import * as os from 'os';
 import type { HookEvent } from '../../types/index.js';
 
 /** Claude Code hook event names that Cortex integrates with. */
-const HOOK_EVENTS = ['SessionStart', 'SessionEnd', 'PreCompact', 'Stop'] as const;
+const HOOK_EVENTS = ['Notification', 'Stop'] as const;
 type HookEventName = (typeof HOOK_EVENTS)[number];
 
 /** Map from Claude Code hook name to our HookEvent type string. */
 const EVENT_TYPE_MAP: Record<HookEventName, HookEvent['type']> = {
-  SessionStart: 'session_start',
-  SessionEnd: 'session_end',
-  PreCompact: 'pre_compact',
+  Notification: 'pre_compact',
   Stop: 'stop',
 };
 
@@ -35,26 +48,30 @@ interface ClaudeSettings {
 }
 
 /**
- * Build the Node one-liner command that a hook executes.
- * It creates the .cortex/.hooks/ directory and writes a signal JSON file.
+ * Build the shell command that a hook executes.
+ * Reads session context from stdin (Claude Code passes JSON to hooks via stdin)
+ * and writes a signal file to .cortex/.hooks/
  */
-function buildHookCommand(eventType: HookEvent['type']): string {
+function buildHookCommand(projectPath: string, eventType: HookEvent['type']): string {
+  const hooksDir = path.join(projectPath, '.cortex', '.hooks');
+  // Use a Node one-liner that reads stdin for session context
   return (
-    `node -e "const fs=require('fs');` +
-    `fs.mkdirSync('.cortex/.hooks',{recursive:true});` +
-    `fs.writeFileSync('.cortex/.hooks/${eventType}_'+Date.now()+'.json',` +
-    `JSON.stringify({type:'${eventType}',` +
-    `sessionId:process.env.SESSION_ID||'unknown',` +
-    `timestamp:new Date().toISOString()}))"`
+    `node -e "` +
+    `const fs=require('fs');` +
+    `let input='';` +
+    `process.stdin.on('data',d=>input+=d);` +
+    `process.stdin.on('end',()=>{` +
+    `let sid='unknown';` +
+    `try{const ctx=JSON.parse(input);sid=ctx.session_id||ctx.sessionId||'unknown';}catch(e){}` +
+    `fs.mkdirSync('${hooksDir.replace(/'/g, "\\'")}',{recursive:true});` +
+    `fs.writeFileSync('${hooksDir.replace(/'/g, "\\'")}/${eventType}_'+Date.now()+'.json',` +
+    `JSON.stringify({type:'${eventType}',sessionId:sid,timestamp:new Date().toISOString()}));` +
+    `});"`
   );
 }
 
 /**
  * Manages Claude Code hooks integration for Cortex.
- *
- * Claude Code hooks are configured in `.claude/settings.json` and fire shell
- * commands at lifecycle events. This manager installs commands that write
- * signal files, then watches for those files to drive memory operations.
  */
 export class HooksManager {
   private readonly projectPath: string;
@@ -63,6 +80,7 @@ export class HooksManager {
 
   constructor(projectPath: string) {
     this.projectPath = projectPath;
+    // Claude Code project settings are at <project>/.claude/settings.json
     this.settingsPath = path.join(projectPath, '.claude', 'settings.json');
     this.hooksDir = path.join(projectPath, '.cortex', '.hooks');
   }
@@ -71,12 +89,6 @@ export class HooksManager {
   // Installation
   // ------------------------------------------------------------------
 
-  /**
-   * Install Cortex hooks into the project's `.claude/settings.json`.
-   *
-   * Reads (or creates) the settings file and merges Cortex hook commands
-   * into the existing configuration without overwriting other hooks.
-   */
   async installHooks(): Promise<void> {
     const settings = await this.readSettings();
 
@@ -86,12 +98,11 @@ export class HooksManager {
 
     for (const event of HOOK_EVENTS) {
       const eventType = EVENT_TYPE_MAP[event];
-      const command = buildHookCommand(eventType);
+      const command = buildHookCommand(this.projectPath, eventType);
       const entry: ClaudeHookEntry = { type: 'command', command };
 
       const existing = settings.hooks[event] ?? [];
 
-      // Only add if Cortex's hook isn't already present.
       const alreadyInstalled = existing.some(
         (h) => h.command.includes('.cortex'),
       );
@@ -103,13 +114,6 @@ export class HooksManager {
     await this.writeSettings(settings);
   }
 
-  /**
-   * Remove only Cortex's hooks from `.claude/settings.json`.
-   *
-   * Other hooks (not containing '.cortex' in the command) are preserved.
-   * If a hook event array becomes empty after removal it is deleted from
-   * the hooks object entirely.
-   */
   async uninstallHooks(): Promise<void> {
     const settings = await this.readSettings();
 
@@ -134,7 +138,6 @@ export class HooksManager {
       }
     }
 
-    // Clean up empty hooks object.
     if (Object.keys(settings.hooks).length === 0) {
       delete settings.hooks;
     }
@@ -146,60 +149,39 @@ export class HooksManager {
   // Signal Watching
   // ------------------------------------------------------------------
 
-  /**
-   * Watch the `.cortex/.hooks/` directory for new signal files.
-   *
-   * Uses polling via `fs.watch` (or a manual interval when `fs.watch` is
-   * unreliable) to detect new JSON signal files written by hooks. Each
-   * file is parsed, the callback is invoked, and the file is deleted.
-   *
-   * Returns a cleanup function that stops the watcher.
-   */
   async watchHookSignals(
     callback: (event: HookEvent) => void,
   ): Promise<() => void> {
-    // Ensure the hooks directory exists before watching.
     await fs.mkdir(this.hooksDir, { recursive: true });
-
-    // Process any signal files already present.
     await this.processSignalFiles(callback);
 
     let stopped = false;
 
-    // Use a polling interval because fs.watch is unreliable on some
-    // platforms (especially for newly-created directories / network fs).
     const pollIntervalMs = 1000;
     const intervalId = setInterval(async () => {
-      if (stopped) {
-        return;
-      }
+      if (stopped) return;
       try {
         await this.processSignalFiles(callback);
       } catch {
-        // Directory may have been removed; ignore transient errors.
+        // Ignore transient errors
       }
     }, pollIntervalMs);
 
-    // Also attempt native fs.watch for lower latency on supported OSes.
+    // Also try native fs.watch for lower latency
     let watcher: ReturnType<typeof import('fs').watch> | null = null;
     try {
-      // Dynamic require so the module works even if fs.watch throws.
       const fsSync = await import('fs');
       watcher = fsSync.watch(this.hooksDir, async (eventType, filename) => {
-        if (stopped || !filename || !filename.endsWith('.json')) {
-          return;
-        }
+        if (stopped || !filename || !filename.endsWith('.json')) return;
         try {
           await this.processSignalFiles(callback);
         } catch {
-          // Ignore transient errors.
+          // Ignore
         }
       });
-
-      // Prevent unhandled 'error' events from crashing the process.
       watcher.on('error', () => {});
     } catch {
-      // fs.watch not available; polling will handle it.
+      // fs.watch not available
     }
 
     return () => {
@@ -215,9 +197,6 @@ export class HooksManager {
   // Status
   // ------------------------------------------------------------------
 
-  /**
-   * Check whether Cortex hooks are currently installed in settings.json.
-   */
   async isInstalled(): Promise<boolean> {
     try {
       const settings = await this.readSettings();
@@ -238,10 +217,6 @@ export class HooksManager {
   // Private helpers
   // ------------------------------------------------------------------
 
-  /**
-   * Read and parse `.claude/settings.json`, returning an empty object
-   * if the file doesn't exist yet.
-   */
   private async readSettings(): Promise<ClaudeSettings> {
     try {
       const raw = await fs.readFile(this.settingsPath, 'utf-8');
@@ -254,10 +229,6 @@ export class HooksManager {
     }
   }
 
-  /**
-   * Write settings back to `.claude/settings.json`, creating the
-   * directory if necessary.
-   */
   private async writeSettings(settings: ClaudeSettings): Promise<void> {
     const dir = path.dirname(this.settingsPath);
     await fs.mkdir(dir, { recursive: true });
@@ -268,10 +239,6 @@ export class HooksManager {
     );
   }
 
-  /**
-   * Scan the hooks directory for signal JSON files, parse each one,
-   * invoke the callback, and delete the processed file.
-   */
   private async processSignalFiles(
     callback: (event: HookEvent) => void,
   ): Promise<void> {
@@ -287,7 +254,7 @@ export class HooksManager {
 
     const jsonFiles = entries
       .filter((f) => f.endsWith('.json'))
-      .sort(); // Process in chronological order.
+      .sort();
 
     for (const file of jsonFiles) {
       const filePath = path.join(this.hooksDir, file);
@@ -295,7 +262,6 @@ export class HooksManager {
         const raw = await fs.readFile(filePath, 'utf-8');
         const parsed = JSON.parse(raw) as Partial<HookEvent>;
 
-        // Validate minimal required fields.
         if (parsed.type && parsed.timestamp) {
           const event: HookEvent = {
             type: parsed.type as HookEvent['type'],
@@ -307,26 +273,18 @@ export class HooksManager {
           callback(event);
         }
 
-        // Delete after successful processing.
         await fs.unlink(filePath);
       } catch {
-        // If the file can't be parsed (partial write, etc.), attempt
-        // removal so it doesn't block future processing.
         try {
           await fs.unlink(filePath);
         } catch {
-          // Ignore – file may already be gone.
+          // Ignore
         }
       }
     }
   }
 }
 
-// ------------------------------------------------------------------
-// Utility
-// ------------------------------------------------------------------
-
-/** Type guard for Node.js system errors with a `code` property. */
 function isNodeError(err: unknown): err is NodeJS.ErrnoException {
   return err instanceof Error && 'code' in err;
 }

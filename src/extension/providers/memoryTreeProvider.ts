@@ -65,6 +65,9 @@ export class MemoryTreeItem extends vscode.TreeItem {
         if (label.startsWith('[Episode]')) {
           return new vscode.ThemeIcon('git-commit', new vscode.ThemeColor('charts.orange'));
         }
+        if (label.startsWith('[Context]')) {
+          return new vscode.ThemeIcon('info', new vscode.ThemeColor('charts.green'));
+        }
         return new vscode.ThemeIcon('circle-outline');
       }
       default:
@@ -83,17 +86,40 @@ export class MemoryTreeProvider implements vscode.TreeDataProvider<MemoryTreeIte
 
   private cortexDir: string | undefined;
 
+  // Debounce rapid refresh calls (e.g. from multiple events firing at once)
+  private refreshTimer: ReturnType<typeof setTimeout> | null = null;
+  private static readonly REFRESH_DEBOUNCE_MS = 300;
+
   constructor() {
     this.cortexDir = this.resolveCortexDir();
   }
 
-  /** Force a full tree refresh. */
+  /** Force a full tree refresh. Debounced to prevent thrashing. */
   refresh(): void {
+    if (this.refreshTimer) {
+      clearTimeout(this.refreshTimer);
+    }
+    this.refreshTimer = setTimeout(() => {
+      this.refreshTimer = null;
+      this.cortexDir = this.resolveCortexDir();
+      this._onDidChangeTreeData.fire();
+    }, MemoryTreeProvider.REFRESH_DEBOUNCE_MS);
+  }
+
+  /** Immediate refresh — bypasses debounce. Use sparingly. */
+  refreshNow(): void {
+    if (this.refreshTimer) {
+      clearTimeout(this.refreshTimer);
+      this.refreshTimer = null;
+    }
     this.cortexDir = this.resolveCortexDir();
     this._onDidChangeTreeData.fire();
   }
 
   dispose(): void {
+    if (this.refreshTimer) {
+      clearTimeout(this.refreshTimer);
+    }
     this._onDidChangeTreeData.dispose();
   }
 
@@ -109,19 +135,17 @@ export class MemoryTreeProvider implements vscode.TreeDataProvider<MemoryTreeIte
     if (!this.cortexDir) {
       return [
         new MemoryTreeItem(
-          'No .cortex/ directory found',
+          'No .cortex/ directory found — run Cortex: Init',
           vscode.TreeItemCollapsibleState.None,
           'leaf',
         ),
       ];
     }
 
-    // Top-level categories
     if (!element) {
       return this.getRootItems();
     }
 
-    // Children per category
     switch (element.layer) {
       case 'working':
         return this.getWorkingMemoryChildren();
@@ -170,20 +194,25 @@ export class MemoryTreeProvider implements vscode.TreeDataProvider<MemoryTreeIte
       const raw = await fs.readFile(filePath, 'utf-8');
       const working = this.parseWorkingMemory(raw);
 
-      if (working.lastSessionSummary) {
+      // Show session summary
+      if (working.lastSessionSummary && !working.lastSessionSummary.startsWith('_No ')) {
         const summary =
-          working.lastSessionSummary.length > 80
-            ? working.lastSessionSummary.slice(0, 77) + '...'
+          working.lastSessionSummary.length > 100
+            ? working.lastSessionSummary.slice(0, 97) + '...'
             : working.lastSessionSummary;
         items.push(
           new MemoryTreeItem(summary, vscode.TreeItemCollapsibleState.None, 'leaf', filePath),
         );
       }
 
-      for (const decision of working.recentDecisions) {
+      // Show current context
+      if (working.currentContext && !working.currentContext.startsWith('_No ')) {
+        const ctx = working.currentContext.length > 80
+          ? working.currentContext.slice(0, 77) + '...'
+          : working.currentContext;
         items.push(
           new MemoryTreeItem(
-            `[Decision] ${decision.title}`,
+            `[Context] ${ctx}`,
             vscode.TreeItemCollapsibleState.None,
             'leaf',
             filePath,
@@ -191,6 +220,22 @@ export class MemoryTreeProvider implements vscode.TreeDataProvider<MemoryTreeIte
         );
       }
 
+      // Show decisions
+      for (const decision of working.recentDecisions) {
+        const label = decision.title.length > 70
+          ? decision.title.slice(0, 67) + '...'
+          : decision.title;
+        items.push(
+          new MemoryTreeItem(
+            `[Decision] ${label}`,
+            vscode.TreeItemCollapsibleState.None,
+            'leaf',
+            filePath,
+          ),
+        );
+      }
+
+      // Show problems
       for (const problem of working.openProblems) {
         const label =
           problem.length > 70 ? problem.slice(0, 67) + '...' : problem;
@@ -207,7 +252,7 @@ export class MemoryTreeProvider implements vscode.TreeDataProvider<MemoryTreeIte
       if (items.length === 0) {
         items.push(
           new MemoryTreeItem(
-            'No working memory yet',
+            'No working memory yet — start a coding session',
             vscode.TreeItemCollapsibleState.None,
             'leaf',
           ),
@@ -240,16 +285,15 @@ export class MemoryTreeProvider implements vscode.TreeDataProvider<MemoryTreeIte
         .filter((e) => e.isFile() && e.name.endsWith('.md'))
         .sort((a, b) => b.name.localeCompare(a.name)); // newest first
 
-      for (const file of mdFiles) {
+      for (const file of mdFiles.slice(0, 20)) { // Limit to 20 most recent
         const filePath = path.join(episodesDir, file.name);
         const episode = await this.parseEpisodeFile(filePath);
-        const label = episode
-          ? `[Episode] ${episode.title}`
-          : `[Episode] ${file.name.replace('.md', '')}`;
+        const title = episode?.title || file.name.replace('.md', '');
+        const label = title.length > 60 ? title.slice(0, 57) + '...' : title;
 
         items.push(
           new MemoryTreeItem(
-            label,
+            `[Episode] ${label}`,
             vscode.TreeItemCollapsibleState.None,
             'leaf',
             filePath,
@@ -257,10 +301,20 @@ export class MemoryTreeProvider implements vscode.TreeDataProvider<MemoryTreeIte
         );
       }
 
+      if (mdFiles.length > 20) {
+        items.push(
+          new MemoryTreeItem(
+            `... and ${mdFiles.length - 20} more episodes`,
+            vscode.TreeItemCollapsibleState.None,
+            'leaf',
+          ),
+        );
+      }
+
       if (items.length === 0) {
         items.push(
           new MemoryTreeItem(
-            'No episodes recorded',
+            'No episodes recorded yet',
             vscode.TreeItemCollapsibleState.None,
             'leaf',
           ),
@@ -292,9 +346,12 @@ export class MemoryTreeProvider implements vscode.TreeDataProvider<MemoryTreeIte
       const decisions = this.parseDecisions(raw);
 
       for (const decision of decisions) {
+        const label = decision.title.length > 60
+          ? decision.title.slice(0, 57) + '...'
+          : decision.title;
         items.push(
           new MemoryTreeItem(
-            `[Decision] ${decision.title}`,
+            `[Decision] ${label}`,
             vscode.TreeItemCollapsibleState.None,
             'leaf',
             filePath,
@@ -305,7 +362,7 @@ export class MemoryTreeProvider implements vscode.TreeDataProvider<MemoryTreeIte
       if (items.length === 0) {
         items.push(
           new MemoryTreeItem(
-            'No decisions logged',
+            'No decisions logged yet',
             vscode.TreeItemCollapsibleState.None,
             'leaf',
           ),
@@ -329,41 +386,45 @@ export class MemoryTreeProvider implements vscode.TreeDataProvider<MemoryTreeIte
   // ----------------------------------------------------------
 
   /**
-   * Best-effort parse of working.md.
-   * Expects a markdown file with YAML-like front matter or structured headings.
-   * Falls back gracefully if the format is unexpected.
+   * Parse working.md into structured data.
+   * Matches the format written by MemoryStore.serializeWorkingMemory().
    */
-  private parseWorkingMemory(raw: string): Pick<WorkingMemory, 'lastSessionSummary' | 'recentDecisions' | 'openProblems'> {
-    const result: Pick<WorkingMemory, 'lastSessionSummary' | 'recentDecisions' | 'openProblems'> = {
+  private parseWorkingMemory(raw: string): {
+    lastSessionSummary: string;
+    currentContext: string;
+    recentDecisions: { title: string }[];
+    openProblems: string[];
+  } {
+    const result = {
       lastSessionSummary: '',
-      recentDecisions: [],
-      openProblems: [],
+      currentContext: '',
+      recentDecisions: [] as { title: string }[],
+      openProblems: [] as string[],
     };
 
-    // Try JSON front-matter between --- fences first
-    const jsonMatch = raw.match(/```json\s*\n([\s\S]*?)\n```/);
-    if (jsonMatch) {
-      try {
-        const parsed = JSON.parse(jsonMatch[1]) as Partial<WorkingMemory>;
-        result.lastSessionSummary = parsed.lastSessionSummary ?? '';
-        result.recentDecisions = parsed.recentDecisions ?? [];
-        result.openProblems = parsed.openProblems ?? [];
-        return result;
-      } catch {
-        // fall through to heading-based parsing
-      }
-    }
-
-    // Heading-based parsing
     const sections = this.splitByHeadings(raw);
 
     for (const [heading, body] of sections) {
       const lower = heading.toLowerCase();
-      if (lower.includes('summary') || lower.includes('session')) {
-        result.lastSessionSummary = body.trim().split('\n')[0] ?? '';
-      } else if (lower.includes('decision')) {
-        result.recentDecisions = this.extractListAsDecisions(body);
-      } else if (lower.includes('problem') || lower.includes('open')) {
+
+      if (lower.includes('last session') || lower === 'last session summary') {
+        // Take the FULL body, not just first line
+        const cleaned = body.trim();
+        if (cleaned && !cleaned.startsWith('_No ')) {
+          result.lastSessionSummary = cleaned;
+        }
+      } else if (lower.includes('current context')) {
+        const cleaned = body.trim();
+        if (cleaned && !cleaned.startsWith('_No ')) {
+          // Flatten bullet points into a single line
+          const lines = cleaned.split('\n')
+            .map(l => l.replace(/^\s*[-*]\s+/, '').trim())
+            .filter(l => l.length > 0);
+          result.currentContext = lines.join(' | ');
+        }
+      } else if (lower.includes('recent decision')) {
+        result.recentDecisions = this.extractDecisionBullets(body);
+      } else if (lower.includes('open problem')) {
         result.openProblems = this.extractListItems(body);
       }
     }
@@ -371,39 +432,39 @@ export class MemoryTreeProvider implements vscode.TreeDataProvider<MemoryTreeIte
     return result;
   }
 
-  private parseDecisions(raw: string): Pick<DecisionEntry, 'title' | 'id'>[] {
-    const decisions: Pick<DecisionEntry, 'title' | 'id'>[] = [];
+  /**
+   * Parse decisions.md — only count actual ADR entries, not sub-headings.
+   */
+  private parseDecisions(raw: string): { title: string; id: string }[] {
+    const decisions: { title: string; id: string }[] = [];
 
-    // Try JSON block
-    const jsonMatch = raw.match(/```json\s*\n([\s\S]*?)\n```/);
-    if (jsonMatch) {
-      try {
-        const parsed = JSON.parse(jsonMatch[1]);
-        if (Array.isArray(parsed)) {
-          return parsed.map((d: Partial<DecisionEntry>) => ({
-            id: d.id ?? '',
-            title: d.title ?? d.decision ?? 'Untitled',
-          }));
-        }
-      } catch {
-        // fall through
-      }
-    }
-
-    // Heading-based: each ## or ### is a decision
-    const headingRe = /^#{2,3}\s+(.+)$/gm;
+    // Primary: match ADR-style headings "## ADR: <title>"
+    const adrRe = /^## ADR:\s+(.+)$/gm;
     let match: RegExpExecArray | null;
     let idx = 0;
-    while ((match = headingRe.exec(raw)) !== null) {
+    while ((match = adrRe.exec(raw)) !== null) {
       decisions.push({ id: String(idx++), title: match[1].trim() });
     }
 
-    // Fallback: list items starting with -
-    if (decisions.length === 0) {
-      const items = this.extractListItems(raw);
-      for (const item of items) {
-        decisions.push({ id: String(idx++), title: item });
+    if (decisions.length > 0) return decisions;
+
+    // Fallback: match ## headings that aren't meta/sub-section headings
+    const skipPatterns = /^(?:decision log|decisions|architectural|context|reason|alternatives|files affected|placeholder)\b/i;
+    const headingRe = /^##\s+(.+)$/gm;
+    while ((match = headingRe.exec(raw)) !== null) {
+      const title = match[1].trim();
+      if (!skipPatterns.test(title)) {
+        decisions.push({ id: String(idx++), title });
       }
+    }
+
+    if (decisions.length > 0) return decisions;
+
+    // Last resort: bullet items (for simple decision lists)
+    const items = this.extractListItems(raw)
+      .filter(item => !item.startsWith('_'));  // Skip placeholder text
+    for (const item of items) {
+      decisions.push({ id: String(idx++), title: item });
     }
 
     return decisions;
@@ -413,27 +474,21 @@ export class MemoryTreeProvider implements vscode.TreeDataProvider<MemoryTreeIte
     try {
       const raw = await fs.readFile(filePath, 'utf-8');
 
-      // Try first heading
+      // YAML frontmatter title
+      const fmTitle = raw.match(/^title:\s*"?([^"\n]*)"?/m);
+      if (fmTitle) {
+        return { title: fmTitle[1].trim() };
+      }
+
+      // First # heading
       const headingMatch = raw.match(/^#\s+(.+)$/m);
       if (headingMatch) {
         return { title: headingMatch[1].trim() };
       }
 
-      // Try JSON block
-      const jsonMatch = raw.match(/```json\s*\n([\s\S]*?)\n```/);
-      if (jsonMatch) {
-        try {
-          const parsed = JSON.parse(jsonMatch[1]) as Partial<EpisodicMemory>;
-          if (parsed.title) {
-            return { title: parsed.title };
-          }
-        } catch {
-          // ignore
-        }
-      }
-
-      // First non-empty line
-      const firstLine = raw.split('\n').find((l) => l.trim().length > 0);
+      // First non-empty, non-frontmatter line
+      const body = raw.replace(/^---[\s\S]*?---\n?/, '');
+      const firstLine = body.split('\n').find((l) => l.trim().length > 0);
       if (firstLine) {
         return { title: firstLine.trim().slice(0, 60) };
       }
@@ -491,17 +546,24 @@ export class MemoryTreeProvider implements vscode.TreeDataProvider<MemoryTreeIte
     return items;
   }
 
-  private extractListAsDecisions(text: string): DecisionEntry[] {
-    return this.extractListItems(text).map((item, idx) => ({
-      id: String(idx),
-      title: item,
-      context: '',
-      decision: item,
-      alternatives: [],
-      reason: '',
-      filesAffected: [],
-      timestamp: '',
-      sessionId: '',
-    }));
+  /**
+   * Extract decisions from working.md bullet format:
+   * "- **Title**: Decision text _(reason)_"
+   */
+  private extractDecisionBullets(text: string): { title: string }[] {
+    const items: { title: string }[] = [];
+    for (const line of text.split('\n')) {
+      const match = line.match(/^\s*[-*]\s+\*\*(.+?)\*\*/);
+      if (match) {
+        items.push({ title: match[1].trim() });
+      } else {
+        // Plain bullet
+        const plain = line.match(/^\s*[-*]\s+(.+)$/);
+        if (plain && !plain[1].startsWith('_')) {
+          items.push({ title: plain[1].trim() });
+        }
+      }
+    }
+    return items;
   }
 }

@@ -9,7 +9,6 @@ import { EventEmitter } from 'node:events';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import * as chokidar from 'chokidar';
 import { parseSessionLine } from './jsonlParser.js';
 import type { SessionMessage } from '../../types/index.js';
 
@@ -54,6 +53,7 @@ export interface SessionWatcherEvents {
   'signal:decision': (info: { sessionId: string; message: SessionMessage }) => void;
   'signal:bug': (info: { sessionId: string; message: SessionMessage }) => void;
   'signal:architecture': (info: { sessionId: string; message: SessionMessage }) => void;
+  'error': (error: Error) => void;
 }
 
 interface TrackedSession {
@@ -68,26 +68,19 @@ interface TrackedSession {
 /** Seconds of inactivity before a session is considered ended. */
 const SESSION_END_TIMEOUT_MS = 60_000;
 
+/** How often to poll for new JSONL files and changes (ms).
+ * Set low for real-time responsiveness. */
+const POLL_INTERVAL_MS = 1_000;
+
 // ---- SessionWatcher -----------------------------------------------------------
 
-/**
- * Watches the Claude Code session directory for the given project and emits
- * events for session lifecycle transitions and semantic signals.
- *
- * Usage:
- * ```ts
- * const watcher = new SessionWatcher('/home/user/myproject');
- * watcher.on('session:start', ({ sessionId }) => { ... });
- * watcher.on('signal:decision', ({ sessionId, message }) => { ... });
- * watcher.start();
- * ```
- */
 export class SessionWatcher extends EventEmitter {
   private readonly projectPath: string;
   private readonly claudeProjectDir: string;
-  private watcher: ReturnType<typeof chokidar.watch> | null = null;
   private sessions: Map<string, TrackedSession> = new Map();
   private running = false;
+  private pollTimer: ReturnType<typeof setInterval> | null = null;
+  private fsWatcher: fs.FSWatcher | null = null;
 
   constructor(projectPath: string) {
     super();
@@ -97,10 +90,6 @@ export class SessionWatcher extends EventEmitter {
 
   // ---- Public API -------------------------------------------------------------
 
-  /**
-   * Begin watching for session file changes. Safe to call multiple times —
-   * subsequent calls are no-ops while already running.
-   */
   start(): void {
     if (this.running) {
       return;
@@ -111,37 +100,60 @@ export class SessionWatcher extends EventEmitter {
     try {
       fs.mkdirSync(this.claudeProjectDir, { recursive: true });
     } catch {
-      // Best-effort — chokidar can handle a missing directory if configured
+      // Best-effort
     }
 
-    const globPattern = path.join(this.claudeProjectDir, '*.jsonl');
+    // Do an initial scan for existing JSONL files
+    this.scanForJsonlFiles();
 
-    this.watcher = chokidar.watch(globPattern, {
-      persistent: true,
-      ignoreInitial: false,
-      awaitWriteFinish: false,
-      // Use polling as a fallback for network-mounted home dirs
-      usePolling: false,
-    });
+    // Set up polling as the PRIMARY mechanism (most reliable cross-platform)
+    this.pollTimer = setInterval(() => {
+      if (!this.running) return;
+      this.scanForJsonlFiles();
+      // Also check tracked sessions for new data
+      for (const tracked of this.sessions.values()) {
+        this.readNewLines(tracked);
+      }
+    }, POLL_INTERVAL_MS);
 
-    this.watcher.on('add', (filePath: string) => this.handleNewFile(filePath));
-    this.watcher.on('change', (filePath: string) => this.handleFileChange(filePath));
-    this.watcher.on('error', (error: unknown) => this.emit('error', error));
+    // Also try native fs.watch for lower latency on supported platforms
+    try {
+      this.fsWatcher = fs.watch(this.claudeProjectDir, (eventType, filename) => {
+        if (!this.running || !filename) return;
+        if (filename.endsWith('.jsonl')) {
+          const filePath = path.join(this.claudeProjectDir, filename);
+          const tracked = this.sessions.get(filePath);
+          if (tracked) {
+            this.readNewLines(tracked);
+            this.resetInactivityTimer(tracked);
+          } else {
+            // New file detected
+            this.handleNewFile(filePath);
+          }
+        }
+      });
+      this.fsWatcher.on('error', () => {
+        // fs.watch can error on some platforms; polling handles it
+      });
+    } catch {
+      // fs.watch not available; polling will handle it
+    }
   }
 
-  /**
-   * Stop watching and clean up all timers and tracked sessions.
-   */
   stop(): void {
     if (!this.running) {
       return;
     }
     this.running = false;
 
-    // Close chokidar watcher
-    if (this.watcher) {
-      this.watcher.close().catch(() => {});
-      this.watcher = null;
+    if (this.pollTimer) {
+      clearInterval(this.pollTimer);
+      this.pollTimer = null;
+    }
+
+    if (this.fsWatcher) {
+      this.fsWatcher.close();
+      this.fsWatcher = null;
     }
 
     // Clear all inactivity timers
@@ -161,8 +173,8 @@ export class SessionWatcher extends EventEmitter {
    * Claude Code stores sessions at:
    *   ~/.claude/projects/<encoded-path>/
    *
-   * where <encoded-path> replaces every `/` in the absolute project path
-   * with `-`. e.g. `/home/user/myproject` -> `-home-user-myproject`
+   * where <encoded-path> replaces every `/` with `-`.
+   * e.g. `/home/user/myproject` -> `-home-user-myproject`
    */
   private resolveClaudeProjectDir(): string {
     const encoded = this.projectPath.replace(/\//g, '-');
@@ -171,16 +183,40 @@ export class SessionWatcher extends EventEmitter {
 
   /**
    * Derive a human-friendly session ID from a JSONL filename.
-   * e.g. `abc123.jsonl` -> `abc123`
    */
   private sessionIdFromPath(filePath: string): string {
     return path.basename(filePath, '.jsonl');
   }
 
   /**
+   * Scan the Claude project directory for JSONL files and track any new ones.
+   */
+  private scanForJsonlFiles(): void {
+    try {
+      const entries = fs.readdirSync(this.claudeProjectDir);
+      for (const entry of entries) {
+        if (!entry.endsWith('.jsonl')) continue;
+        const filePath = path.join(this.claudeProjectDir, entry);
+        if (!this.sessions.has(filePath)) {
+          this.handleNewFile(filePath);
+        }
+      }
+    } catch {
+      // Directory may not exist yet
+    }
+  }
+
+  /**
    * Handle a newly detected JSONL file (new session).
    */
   private handleNewFile(filePath: string): void {
+    // Verify file exists
+    try {
+      fs.statSync(filePath);
+    } catch {
+      return;
+    }
+
     const sessionId = this.sessionIdFromPath(filePath);
 
     if (this.sessions.has(filePath)) {
@@ -198,29 +234,6 @@ export class SessionWatcher extends EventEmitter {
     this.emit('session:start', { sessionId, filePath });
 
     // Read any existing content in the file
-    this.readNewLines(tracked);
-    this.resetInactivityTimer(tracked);
-  }
-
-  /**
-   * Handle a change event on an existing JSONL file (new messages appended).
-   */
-  private handleFileChange(filePath: string): void {
-    let tracked = this.sessions.get(filePath);
-
-    if (!tracked) {
-      // File changed but we never saw the 'add' event — treat as new session
-      const sessionId = this.sessionIdFromPath(filePath);
-      tracked = {
-        filePath,
-        sessionId,
-        byteOffset: 0,
-        inactivityTimer: null,
-      };
-      this.sessions.set(filePath, tracked);
-      this.emit('session:start', { sessionId, filePath });
-    }
-
     this.readNewLines(tracked);
     this.resetInactivityTimer(tracked);
   }
@@ -266,6 +279,8 @@ export class SessionWatcher extends EventEmitter {
     const chunk = buffer.toString('utf-8');
     const lines = chunk.split('\n');
 
+    let hasNewMessages = false;
+
     for (const line of lines) {
       if (!line.trim()) {
         continue;
@@ -276,14 +291,18 @@ export class SessionWatcher extends EventEmitter {
         continue;
       }
 
+      hasNewMessages = true;
       this.emit('session:message', { ...message, sessionId: tracked.sessionId });
       this.detectSignals(tracked.sessionId, message);
+    }
+
+    if (hasNewMessages) {
+      this.resetInactivityTimer(tracked);
     }
   }
 
   /**
-   * Reset the inactivity timer for a tracked session. If no new writes
-   * arrive within SESSION_END_TIMEOUT_MS, emit 'session:end'.
+   * Reset the inactivity timer for a tracked session.
    */
   private resetInactivityTimer(tracked: TrackedSession): void {
     if (tracked.inactivityTimer) {
@@ -319,9 +338,6 @@ export class SessionWatcher extends EventEmitter {
 
 // ---- Helpers ------------------------------------------------------------------
 
-/**
- * Test whether a string matches any pattern in the provided list.
- */
 function matchesAny(text: string, patterns: RegExp[]): boolean {
   for (const pattern of patterns) {
     if (pattern.test(text)) {

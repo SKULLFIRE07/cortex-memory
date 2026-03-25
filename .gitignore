@@ -4,3 +4,4 @@ dist/
 .cortex/
 .claude/
 *.log
+.CLAUDE.md.tmp

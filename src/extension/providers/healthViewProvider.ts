@@ -13,6 +13,8 @@ export class HealthViewProvider implements vscode.WebviewViewProvider {
 
   private view?: vscode.WebviewView;
   private health: MemoryHealth = HealthViewProvider.defaultHealth();
+  private refreshTimer: ReturnType<typeof setTimeout> | null = null;
+  private pendingRefresh = false;
 
   constructor(private readonly extensionUri: vscode.Uri) {}
 
@@ -39,12 +41,40 @@ export class HealthViewProvider implements vscode.WebviewViewProvider {
       }
     });
 
+    // Refresh when the panel becomes visible again
+    webviewView.onDidChangeVisibility(() => {
+      if (webviewView.visible) {
+        this.loadAndRender();
+      }
+    });
+
+    // If refresh was called before the view was resolved, load now
     this.loadAndRender();
+    this.pendingRefresh = false;
   }
 
-  /** Reload data from disk and re-render the webview. */
+  /** Reload data from disk and re-render the webview. Debounced. */
   async refresh(): Promise<void> {
-    await this.loadAndRender();
+    // If the view hasn't been resolved yet (panel not opened), mark pending
+    if (!this.view) {
+      this.pendingRefresh = true;
+      return;
+    }
+
+    // Debounce rapid refresh calls
+    if (this.refreshTimer) {
+      clearTimeout(this.refreshTimer);
+    }
+    this.refreshTimer = setTimeout(() => {
+      this.refreshTimer = null;
+      this.loadAndRender();
+    }, 400);
+  }
+
+  /** Force set the view and re-render (used when view becomes visible). */
+  setView(webviewView: vscode.WebviewView): void {
+    this.view = webviewView;
+    this.loadAndRender();
   }
 
   // ----------------------------------------------------------
@@ -87,6 +117,20 @@ export class HealthViewProvider implements vscode.WebviewViewProvider {
       // no working memory yet
     }
 
+    // Also check CLAUDE.md — the injector updates it each session,
+    // so use the most recent mtime between working.md and CLAUDE.md
+    try {
+      const workspaceRoot = path.dirname(cortexDir);
+      const claudeMdPath = path.join(workspaceRoot, 'CLAUDE.md');
+      const claudeStat = await fs.stat(claudeMdPath);
+      const claudeMtime = claudeStat.mtime.toISOString();
+      if (!health.lastUpdated || claudeMtime > health.lastUpdated) {
+        health.lastUpdated = claudeMtime;
+      }
+    } catch {
+      // no CLAUDE.md
+    }
+
     // Count episodes
     try {
       const episodesDir = path.join(cortexDir, 'episodes');
@@ -96,17 +140,19 @@ export class HealthViewProvider implements vscode.WebviewViewProvider {
       // no episodes directory
     }
 
-    // Count decisions
+    // Count decisions — only count ADR headings, not sub-headings like Context/Decision/Reason
     try {
       const decisionsPath = path.join(cortexDir, 'decisions.md');
       const raw = await fs.readFile(decisionsPath, 'utf-8');
-      const headings = raw.match(/^#{2,3}\s+.+$/gm);
-      if (headings) {
-        health.decisionCount = headings.length;
+      // Match only ADR-style headings: "## ADR: <title>"
+      const adrHeadings = raw.match(/^## ADR:\s+.+$/gm);
+      if (adrHeadings) {
+        health.decisionCount = adrHeadings.length;
       } else {
-        // Fallback: count list items
-        const listItems = raw.match(/^\s*[-*]\s+.+$/gm);
-        health.decisionCount = listItems?.length ?? 0;
+        // Fallback: count ## headings that aren't meta headings or ADR sub-sections
+        const skipHeadings = /^#{2,3}\s+(?:Decision Log|Decisions|Architectural|Context|Decision|Reason|Alternatives|Files Affected)\b/i;
+        const allHeadings = raw.match(/^#{2,3}\s+.+$/gm) ?? [];
+        health.decisionCount = allHeadings.filter(h => !skipHeadings.test(h)).length;
       }
     } catch {
       // no decisions file
@@ -345,6 +391,16 @@ export class HealthViewProvider implements vscode.WebviewViewProvider {
   </div>
 
   <div class="timestamp">Last updated: ${this.escapeHtml(lastUpdatedDisplay)}</div>
+
+  ${h.score === 0 ? `
+  <div class="section" style="margin-top: 14px;">
+    <div class="section-title">Getting Started</div>
+    <div style="font-size: 12px; line-height: 1.6; color: var(--fg);">
+      Cortex auto-captures memory from your AI coding sessions.<br><br>
+      <strong>Just start coding</strong> with Claude Code, Cursor, or Cline — Cortex will remember everything automatically.
+    </div>
+  </div>
+  ` : ''}
 
   <script>
     const vscode = acquireVsCodeApi();

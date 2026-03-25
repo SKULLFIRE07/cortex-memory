@@ -1,7 +1,7 @@
 {
   "name": "cortex-memory",
-  "displayName": "Cortex - AI Memory for Your Codebase",
-  "description": "Gives Claude, Cursor, and Cline a permanent memory for your codebase. Never re-explain context again.",
+  "displayName": "Cortex - AI Memory for Claude, Cursor, Copilot, Cline",
+  "description": "Persistent memory for AI coding assistants. Auto-captures decisions, patterns, and context from Claude Code sessions. Works with Cursor, Cline, Copilot via MCP. Never re-explain your codebase again.",
   "version": "0.1.0",
   "publisher": "cortex-dev",
   "license": "MIT",
@@ -9,17 +9,15 @@
     "vscode": "^1.85.0"
   },
   "categories": [
-    "AI",
+    "Machine Learning",
     "Other"
   ],
   "keywords": [
-    "claude",
-    "cursor",
+    "ai",
     "memory",
     "context",
-    "AI",
-    "cline",
-    "windsurf"
+    "claude",
+    "cursor"
   ],
   "activationEvents": [
     "workspaceContains:**/CLAUDE.md",
@@ -30,7 +28,15 @@
   "icon": "media/icon.png",
   "repository": {
     "type": "git",
-    "url": "https://github.com/cortex-dev/cortex"
+    "url": "https://github.com/SKULLFIRE07/cortex-memory"
+  },
+  "homepage": "https://github.com/SKULLFIRE07/cortex-memory#readme",
+  "bugs": {
+    "url": "https://github.com/SKULLFIRE07/cortex-memory/issues"
+  },
+  "galleryBanner": {
+    "color": "#1a1a2e",
+    "theme": "dark"
   },
   "contributes": {
     "viewsContainers": {
@@ -83,6 +89,10 @@
       {
         "command": "cortex.unpinMemory",
         "title": "Cortex: Unpin Memory"
+      },
+      {
+        "command": "cortex.setApiKey",
+        "title": "Cortex: Set API Key"
       }
     ],
     "configuration": {

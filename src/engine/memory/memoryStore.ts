@@ -220,14 +220,74 @@ export class MemoryStore {
   // ================================================================
 
   /**
-   * Search the semantic knowledge graph.
-   * TODO: Implement vector-based semantic search with embeddings.
+   * Search across all memory layers using text matching.
+   * Falls back to substring search until vector embeddings are implemented.
    */
-  async search(_query: string): Promise<MemoryEntry[]> {
-    // TODO: Implement semantic search over the knowledge graph.
-    // This will use embeddings + cosine similarity once the
-    // vector store is integrated.
-    return [];
+  async search(query: string): Promise<MemoryEntry[]> {
+    const results: MemoryEntry[] = [];
+    const term = query.toLowerCase();
+
+    // Search working memory
+    try {
+      const raw = await fs.readFile(this.workingPath, 'utf-8');
+      if (raw.toLowerCase().includes(term)) {
+        results.push({
+          id: 'working-memory',
+          layer: 'working',
+          summary: 'Working Memory',
+          content: raw,
+          tags: ['working-memory'],
+          createdAt: '',
+          updatedAt: '',
+          sessionId: '',
+          status: 'active',
+        });
+      }
+    } catch { /* file may not exist */ }
+
+    // Search decisions
+    try {
+      const decisions = await this.getDecisions();
+      for (const d of decisions) {
+        const text = `${d.title} ${d.decision} ${d.context} ${d.reason}`.toLowerCase();
+        if (text.includes(term)) {
+          results.push({
+            id: d.id,
+            layer: 'semantic',
+            summary: `Decision: ${d.title}`,
+            content: `${d.decision}\nReason: ${d.reason}`,
+            tags: ['decision', ...d.filesAffected],
+            createdAt: d.timestamp,
+            updatedAt: d.timestamp,
+            sessionId: d.sessionId,
+            status: 'active',
+          });
+        }
+      }
+    } catch { /* file may not exist */ }
+
+    // Search episodes
+    try {
+      const episodes = await this.getEpisodes();
+      for (const ep of episodes) {
+        const text = `${ep.title} ${ep.summary}`.toLowerCase();
+        if (text.includes(term)) {
+          results.push({
+            id: ep.id,
+            layer: 'episodic',
+            summary: ep.title,
+            content: ep.summary,
+            tags: ep.filesAffected,
+            createdAt: ep.timestamp,
+            updatedAt: ep.timestamp,
+            sessionId: ep.sessionId,
+            status: 'active',
+          });
+        }
+      }
+    } catch { /* dir may not exist */ }
+
+    return results;
   }
 
   /**
@@ -425,8 +485,10 @@ export class MemoryStore {
     // Extract section contents by heading.
     const sections = this.extractSections(raw);
 
-    wm.lastSessionSummary = sections['Last Session']?.trim() || '';
-    if (wm.lastSessionSummary === '_No sessions recorded yet._') {
+    wm.lastSessionSummary = sections['Last Session']?.trim()
+      || sections['Last Session Summary']?.trim()
+      || '';
+    if (wm.lastSessionSummary.startsWith('_No ')) {
       wm.lastSessionSummary = '';
     }
 

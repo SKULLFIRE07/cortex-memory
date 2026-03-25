@@ -1,160 +1,80 @@
 # Cortex - Project Memory for AI Coding Assistants
 
-**Your AI forgets everything between sessions. Cortex gives it a brain.**
-
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.1.0-green.svg)](https://github.com/SKULLFIRE07/cortex-memory)
-[![VS Code](https://img.shields.io/badge/VS%20Code-1.85%2B-blue.svg)](https://marketplace.visualstudio.com/items?itemName=cortex-dev.cortex-memory)
-[![MCP](https://img.shields.io/badge/MCP-Compatible-purple.svg)](#mcp-server)
-
----
+> **Your AI forgets everything between sessions. Cortex gives it a brain.**
 
 Every time you start a new AI coding session, you waste 15-30 minutes re-explaining your project. Architecture, past decisions, known bugs, conventions — all gone.
 
-**Cortex captures everything automatically.** Decisions, patterns, context, files changed — injected into your next session before you type a single character.
+**Cortex captures everything automatically** and injects it into your next session before you type a single character.
 
-Works with **Claude Code**, **Cursor**, **Cline**, **Copilot**, and any MCP-compatible tool.
+Works with **Claude Code** | **Cursor** | **Cline** | **Copilot** | **Any MCP client**
+
+---
+
+## Why Cortex?
+
+| Without Cortex | With Cortex |
+|---|---|
+| "Here's my project structure again..." | AI already knows your architecture |
+| "We decided to use Redis because..." | Decision auto-captured with full context |
+| "The bug was in the auth middleware..." | Bug pattern recorded, never repeated |
+| "Don't touch that file, it's..." | Convention remembered across sessions |
+| 15-30 min context loading per session | **0 min.** Full context injected automatically |
+
+---
 
 ## How It Works
 
 ```
-You code with AI  →  Cortex watches silently  →  Memory builds automatically
-                                                        ↓
-Next session starts  ←  Context injected into CLAUDE.md  ←  Best context selected
+You code with AI  -->  Cortex watches silently  -->  Memory builds automatically
+                                                           |
+Next session starts  <--  Context injected into CLAUDE.md  <--  Best context selected
 ```
 
-**Zero config.** Install the extension. Start coding. That's it.
+**Install. Code. That's it.** Zero configuration needed.
 
-## Install
+---
 
-### VSCode Extension (recommended)
-1. Install from VS Code Marketplace (search "Cortex Memory")
-2. Open any project
-3. Start coding with your AI assistant
+## Features
 
-Cortex auto-initializes `.cortex/` in your project, starts watching sessions, and injects memory into `CLAUDE.md` automatically.
+### Real-Time Memory Capture
+Cortex monitors your AI sessions live — not just at the end:
+- **Every 1 second** — Watches for new messages
+- **Every 15 seconds** — Fast local extraction (no API call)
+- **Every 20 messages** — Deep LLM extraction in background
+- **On decisions/bugs detected** — Immediate capture
+- Status bar shows `Cortex: Live` during active sessions
 
-### CLI
-```bash
-npm install -g cortex-memory
-cortex status    # Check memory health
-cortex query "auth flow"  # Search your memory
-cortex export    # Export everything as markdown
-```
-
-### MCP Server (for Cursor, Cline, Zed)
-Add to your MCP config:
-```json
-{
-  "cortex": {
-    "command": "node",
-    "args": ["/path/to/cortex/dist/mcp/index.js"]
-  }
-}
-```
-
-Exposes 5 tools: `cortex_get_context`, `cortex_search`, `cortex_save_memory`, `cortex_get_decisions`, `cortex_status`.
-
-## What Gets Captured
-
-Cortex monitors your AI coding sessions in real-time and extracts:
-
-| Signal | Example | Storage |
-|--------|---------|---------|
-| **Decisions** | "Let's go with Redis for sessions" | ADR in `decisions.md` |
-| **Bug patterns** | "The root cause was a race condition in..." | Episode + working memory |
-| **Architecture changes** | "Let's refactor auth into its own module" | Episode + decision log |
-| **File changes** | Every file your AI reads, edits, creates | Tracked per episode |
-| **Session context** | What you worked on, what's unfinished | Working memory |
-| **Open problems** | Unresolved bugs, TODOs, blockers | Working memory |
-
-## 3-Layer Memory Architecture
-
+### 3-Layer Memory Architecture
 Inspired by how human memory works:
 
-### Layer 1: Working Memory (hot) - Always injected
-- Last session summary
-- Recent decisions (last 5)
-- Open problems
-- Current context
-- **~800 tokens** — injected into `CLAUDE.md` before every session
+**Layer 1: Working Memory (hot)** — Always injected (~800 tokens)
+- Last session summary, recent decisions, open problems
+- Auto-injected into `CLAUDE.md` before every session
 - Your AI reads this automatically
 
-### Layer 2: Episodic Memory (warm) - Session histories
-- One file per session in `.cortex/episodes/`
-- Full context: decisions, patterns, files affected
-- Auto-generated ADRs in `.cortex/decisions.md`
+**Layer 2: Episodic Memory (warm)** — Session histories
+- One file per session with full context
+- Auto-generated Architectural Decision Records (ADRs)
 - Searchable via CLI and MCP
 
-### Layer 3: Semantic Memory (cold) - Knowledge graph
+**Layer 3: Semantic Memory (cold)** — Knowledge graph
 - Full-text search across all layers
-- Vector embeddings planned (v0.2)
+- Vector embeddings (coming in v0.2)
 
-## Real-Time Updates
+### Auto-Generated Decision Logs
+Every architectural decision captured with:
+- What was decided and why
+- Alternatives considered
+- Files affected
+- Full session context
 
-Cortex doesn't wait for your session to end. It updates **live**:
+### VSCode Sidebar
+- Memory Layers tree view (Working, Episodes, Decisions)
+- Memory Health dashboard (0-100 score)
+- Token budget tracking
+- Live updates during sessions
 
-- **Every 1 second** — Watches for new messages in Claude Code JSONL
-- **Every 15 seconds** — Fast local extraction (no API call, instant)
-- **Every 20 messages** — Deep LLM extraction in background (free with Gemini)
-- **On decisions/bugs detected** — Immediate flush to memory
-- **On session end** — Final full extraction with everything
-
-The VSCode status bar shows `Cortex: Live` during active sessions.
-
-## LLM Providers
-
-Cortex uses an LLM to extract structured memories from your sessions. Three options:
-
-| Provider | Cost | Model | Setup |
-|----------|------|-------|-------|
-| **Gemini** (default) | **Free** (500 req/day) | gemini-2.5-flash | Get key at [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
-| **Anthropic** | ~$0.01/session | claude-haiku-4-5 | Set `cortex.apiKey` in VS Code settings |
-| **Ollama** | Free (local) | llama3.2 | Install Ollama, set provider to `ollama` |
-
-**No API key?** Cortex still works with basic pattern-matching extraction. The API key makes extraction smarter, not required.
-
-## VS Code Settings
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `cortex.enabled` | `true` | Enable/disable Cortex |
-| `cortex.llmProvider` | `gemini` | LLM provider (`gemini`, `anthropic`, `ollama`) |
-| `cortex.apiKey` | `""` | API key for Gemini or Anthropic |
-| `cortex.maxWorkingMemoryTokens` | `800` | Token budget for working memory |
-| `cortex.autoInjectClaudeMd` | `true` | Auto-inject into CLAUDE.md |
-
-Set your API key: `Ctrl+Shift+P` → "Cortex: Set API Key"
-
-## Commands
-
-| Command | What it does |
-|---------|-------------|
-| `Cortex: Initialize Project Memory` | Create `.cortex/` in current project |
-| `Cortex: Show Memory Status` | Health score, token usage, stats |
-| `Cortex: Search Memories` | Full-text search across all layers |
-| `Cortex: Refresh Memory View` | Force refresh sidebar |
-| `Cortex: Set API Key` | Configure Gemini/Anthropic API key |
-
-## File Structure
-
-```
-your-project/
-├── .cortex/                    # Auto-created, add to .gitignore
-│   ├── working.md              # Layer 1: Current context (~800 tokens)
-│   ├── decisions.md            # Auto-generated ADRs
-│   ├── episodes/               # Layer 2: One file per session
-│   │   ├── 2026-03-25-fix-auth-bug.md
-│   │   └── 2026-03-26-add-api-endpoints.md
-│   └── config.json             # Project config
-├── CLAUDE.md                   # Auto-injected with working memory
-└── ...
-```
-
-## How Auto-Injection Works
-
-Cortex maintains a section in your `CLAUDE.md` between markers:
-
+### CLAUDE.md Auto-Injection
 ```markdown
 <!-- CORTEX:START -->
 ## Project Memory (auto-managed by Cortex)
@@ -165,55 +85,152 @@ Fixed authentication bug in session middleware...
 ### Recent Decisions
 - **Use Redis for sessions**: Latency requirements...
 
-### Current Context
-Sprint 3, auth module refactor
-
 ### Open Problems
 - Rate limiting not implemented yet
 
 _Last updated: 2026-03-26T10:30:00Z | Tokens: 227/800_
 <!-- CORTEX:END -->
 ```
+Claude Code, Cursor, and Cline read `CLAUDE.md` natively.
 
-Claude Code, Cursor, and Cline read `CLAUDE.md` natively. Your AI gets full context before you say anything.
+---
+
+## Quick Start
+
+### 1. Install
+Search **"Cortex Memory"** in VS Code Extensions, or:
+```
+ext install cortex-dev.cortex-memory
+```
+
+### 2. (Optional) Add a free API key for smarter extraction
+- Get a free Gemini key at [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
+- Run `Ctrl+Shift+P` → **Cortex: Set API Key** → paste key
+
+### 3. Code
+Start coding with your AI assistant. Cortex runs silently in the background.
+
+> Works without an API key too — basic pattern-matching extraction runs locally.
+
+---
+
+## What Gets Captured
+
+| Signal | Example | Where It's Stored |
+|--------|---------|-------------------|
+| **Decisions** | "Let's go with Redis for sessions" | `decisions.md` (ADR format) |
+| **Bug patterns** | "Root cause was a race condition" | Episode + working memory |
+| **Architecture** | "Refactor auth into its own module" | Episode + decision log |
+| **File changes** | Every file read, edited, created | Tracked per episode |
+| **Session context** | What you worked on, what's next | Working memory |
+| **Open problems** | Unresolved bugs, TODOs | Working memory |
+
+---
+
+## LLM Providers
+
+| Provider | Cost | Setup |
+|----------|------|-------|
+| **Gemini** (default) | **Free** (500 req/day) | Get key at [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
+| **Anthropic** | ~$0.01/session | Set `cortex.apiKey` in settings |
+| **Ollama** | Free (local) | Install Ollama, set provider to `ollama` |
+| **No API key** | Free | Works with basic pattern matching |
+
+---
+
+## CLI Tool
+
+```bash
+npm install -g cortex-memory
+
+cortex status              # Memory health score
+cortex query "auth flow"   # Search across all layers
+cortex export              # Export as single markdown
+```
+
+## MCP Server (Cursor, Cline, Zed)
+
+```json
+{
+  "cortex": {
+    "command": "node",
+    "args": ["path/to/cortex/dist/mcp/index.js"]
+  }
+}
+```
+
+Tools: `cortex_get_context` | `cortex_search` | `cortex_save_memory` | `cortex_get_decisions` | `cortex_status`
+
+---
+
+## Settings
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `cortex.llmProvider` | `gemini` | Provider: `gemini`, `anthropic`, `ollama` |
+| `cortex.apiKey` | — | API key for Gemini or Anthropic |
+| `cortex.maxWorkingMemoryTokens` | `800` | Token budget for working memory |
+| `cortex.autoInjectClaudeMd` | `true` | Auto-inject into CLAUDE.md |
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| **Cortex: Set API Key** | Configure your LLM API key |
+| **Cortex: Show Memory Status** | Health score, token usage, stats |
+| **Cortex: Search Memories** | Full-text search |
+| **Cortex: Refresh Memory View** | Force refresh sidebar |
+| **Cortex: Initialize Project Memory** | Manual init (usually automatic) |
+
+---
 
 ## Privacy
 
-- **Local-first**: All data stays in `.cortex/` on your machine
-- **No telemetry**: Zero data collection
-- **No cloud**: Only external call is to your chosen LLM provider
-- **Your data**: Delete `.cortex/` anytime to erase all memory
-- **Gitignore**: Auto-added to `.gitignore` (opt-in to share with team)
+- **100% local** — All data in `.cortex/` on your machine
+- **No telemetry** — Zero data collection, zero tracking
+- **No cloud** — Only external call is to your chosen LLM
+- **Your data** — Delete `.cortex/` to erase everything
+- **Git-safe** — Auto-added to `.gitignore`
+
+---
+
+## Supported AI Assistants
+
+| Assistant | Integration | How |
+|-----------|------------|-----|
+| **Claude Code** | Native | CLAUDE.md injection + session watching |
+| **Cursor** | MCP | Via MCP server |
+| **Cline** | MCP | Via MCP server |
+| **Copilot** | Passive | Reads CLAUDE.md if present |
+| **Zed** | MCP | Via MCP server |
+| **Continue** | MCP | Via MCP server |
+
+---
 
 ## FAQ
 
 **Does this slow down my editor?**
-No. All processing happens in the background. The extension is <200KB bundled.
+No. <200KB bundle. All processing in background.
 
 **Does it work without an API key?**
-Yes. Basic pattern-matching extraction works out of the box. An API key enables deeper LLM-powered extraction.
-
-**Can my team share memories?**
-Team sync via git is planned for v0.2. For now, you can commit `.cortex/` to share.
-
-**What AI assistants are supported?**
-- **Claude Code** — Native via CLAUDE.md injection + session watching
-- **Cursor** — Via MCP server
-- **Cline** — Via MCP server
-- **Copilot** — Via CLAUDE.md (if your project has one)
-- **Any MCP client** — Via the MCP server
+Yes. Basic extraction works out of the box. API key enables deeper LLM-powered extraction.
 
 **How much does Gemini cost?**
-$0. The free tier gives 500 requests/day, more than enough for any coding session.
+$0. Free tier = 500 requests/day. More than enough.
 
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines. PRs welcome!
-
-## License
-
-MIT - see [LICENSE](LICENSE) for details.
+**Can my team share memories?**
+Team sync via git planned for v0.2. You can commit `.cortex/` to share now.
 
 ---
 
-**Built for developers who are tired of explaining their codebase to AI. Again. And again. And again.**
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). PRs welcome.
+
+## License
+
+MIT
+
+---
+
+**Stop explaining your codebase to AI. Let Cortex remember it for you.**

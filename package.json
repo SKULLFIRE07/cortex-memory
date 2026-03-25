@@ -9,7 +9,7 @@
     "vscode": "^1.85.0"
   },
   "categories": [
-    "Machine Learning",
+    "AI",
     "Other"
   ],
   "keywords": [
@@ -17,7 +17,12 @@
     "memory",
     "context",
     "claude",
-    "cursor"
+    "cursor",
+    "cline",
+    "copilot",
+    "mcp",
+    "coding-assistant",
+    "developer-tools"
   ],
   "activationEvents": [
     "workspaceContains:**/CLAUDE.md",
